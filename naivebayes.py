@@ -19,6 +19,9 @@ class NaiveBayesClassifier(ABC):
 class GaussianNB(NaiveBayesClassifier):
 
     def fit(self, X, y):
+        """Fits the model to the given data. For every class in y computes
+        means and standard deviations of the corresponding subset of X.
+        """
         self.X, self.y = X, y
         self.nobs_, self.nfeat_ = X.shape
         self.classes_ = np.unique(y)
@@ -28,13 +31,9 @@ class GaussianNB(NaiveBayesClassifier):
             X_where_c = X[np.where(y == cls)]
             self.mu_[i] = X_where_c.mean(axis=0)
             self.sigma_[i] = X_where_c.std(axis=0)
-        self.trained = True
 
     def predict(self, X):
-        return [self._classify(sample) for sample in X]
-
-    def _classify(self, sample):
-        """ Classifies the sample as the class that results in the largest
+        """Classifies each sample in X as the class that results in the largest
         P(Y|X) (posterior).
 
         Classification using Bayes Rule:
@@ -47,27 +46,28 @@ class GaussianNB(NaiveBayesClassifier):
                  given the feature values of x being distributed according to
                  distribution of y and the prior.
         P(X|Y) - Likelihood of data X given class distribution Y.
-                 Gaussian distribution (given by _compute_likelihood)
-        P(Y)   - Prior (given by _compute_prior)
+                 Gaussian distribution (given by _compute_likelihoods)
+        P(Y)   - Prior (given by _compute_priors)
         P(X)   - Scales the posterior to make it a proper probability
                  distribution.  This term is ignored since it doesn't affect
                  which class distribution the sample is most likely to belong
                  to.
         """
         posteriors = []
-        for i, cls in enumerate(self.classes_):
-            posterior = self._compute_prior(cls)
-            for feature, mean, sigma in zip(sample, self.mu_[i], self.sigma_[i]):
-                likelihood = self._compute_likelihood(mean, sigma, feature)
-                posterior *= likelihood
+        if not hasattr(self, 'priors'):
+            self.priors = self._compute_priors(self.classes_)
+        for i, cls in enumerate(self.classes_):  # loop to small to need vectorization
+            likelihoods = self._compute_likelihoods(self.mu_[i], self.sigma_[i], X)
+            posterior = self.priors[i] * np.multiply.reduce(likelihoods, axis=1)
             posteriors.append(posterior)
-        return self.classes_[np.argmax(posteriors)]
+        posteriors = np.stack(posteriors)
+        return self.classes_[np.argmax(posteriors, axis=0)]
 
-    def _compute_prior(self, cls):
-        return np.mean(self.y == cls)
+    def _compute_priors(self, classes):
+        return (self.y[:, np.newaxis] == classes).mean(axis=0)
 
-    def _compute_likelihood(self, mean, sigma, x):
-        return scipy.stats.norm(loc=mean, scale=sigma).pdf(x)
+    def _compute_likelihoods(self, means, sigmas, sample):
+        return scipy.stats.norm(loc=means, scale=sigmas).pdf(sample)
 
 
 if __name__ == "__main__":
