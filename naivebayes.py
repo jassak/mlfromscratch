@@ -103,6 +103,7 @@ class NaiveBayesClassifier(ABC):
         self.X, self.y = X, y
         self.n_samples_, self.n_features_ = X.shape
         self.classes_ = np.unique(y)
+        self.n_classes_ = len(self.classes_)
 
     def _compute_log_priors(self, classes):
         """
@@ -182,6 +183,93 @@ class GaussianNB(NaiveBayesClassifier):
         return np.log(scipy.stats.norm(loc, scale).pdf(X))
 
 
+class MultinomialNB(NaiveBayesClassifier):
+    """
+    Gaussian naive Bayes classifier for continuous data.
+
+    """
+    def __init__(self, alpha=1):
+        self.alpha = alpha
+        super().__init__()
+
+    def fit(self, X, y):
+        """Multinomial case: for every class c in y and for every
+        feature x compute P(x_i | c) where x_i is the ith level of feature x.
+
+        P(x_i | c) = (N_ci + alpha) / (N_c + alpha * n)
+
+        where alpha is the smoothing parameter.
+
+        Parameters
+        ----------
+        X : matrix of shape (n_samples, n_features)
+            Training vectors, where n_samples is the number of samples and
+            n_features is the number of features.
+
+        y : array of shape (n_samples,)
+            Target values.
+
+        """
+        self._store_data(X, y)
+        self.theta_ = np.empty((self.n_features_, self.n_classes_))
+        for c in range(self.n_classes_):
+            for i in range(self.n_features_):
+                X_where_c = X[np.where(y == c)]
+                N_ci = X_where_c[:, i].sum()
+                self.theta_[i][c] = N_ci
+        for c in range(self.n_classes_):
+            N_c = self.theta_[:, c].sum()
+            for i in range(self.n_features_):
+                self.theta_[i][c] += self.alpha
+                self.theta_[i][c] /= (N_c + self.alpha * self.n_samples_)
+
+    def predict(self, X):
+        scores = []
+        if not hasattr(self, "priors"):
+            self.log_priors = self._compute_log_priors(self.classes_)
+        for c in range(self.n_classes_):
+            log_likelihoods = self._compute_log_likelihoods(X, cls_indx=c)
+            scores.append(self.log_priors[c] + log_likelihoods)
+        scores = np.stack(scores)
+        return self.classes_[np.argmax(scores, axis=0)]
+
+    def _store_data(self, X, y):
+        """
+
+        Parameters
+        ----------
+        X : matrix of shape (n_samples, n_features)
+            Training vectors, where n_samples is the number of samples and
+            n_features is the number of features.
+
+        y : array of shape (n_samples,)
+            Target values.
+
+        """
+        self.feature_classes = [np.unique(feature) for feature in X.T]
+        super()._store_data(X, y)
+
+    def _compute_log_likelihoods(self, X, cls_indx):
+        """
+
+        Parameters
+        ----------
+        X : matrix of shape (n_samples, n_features)
+            Training vectors, where n_samples is the number of samples and
+            n_features is the number of features.
+
+        cls_indx : index of class for which log-likelihood is computed
+
+
+        Returns
+        -------
+        log-likelihoods
+
+        """
+        likelihoods = [self.theta_[:, cls_indx] @ sample for sample in X]
+        return np.log(likelihoods)
+
+
 def run_gnb():
     from sklearn.datasets import load_iris
 
@@ -199,5 +287,24 @@ def run_gnb():
     print(f"Sklearn's accuracy = {np.mean(y == yhat)}")
 
 
+def run_mnb():
+    from sklearn.datasets import load_digits
+
+    X, y = load_digits(return_X_y=True)
+    X = X.astype("int32")
+    mnb = MultinomialNB()
+    mnb.fit(X, y)
+    yhat = mnb.predict(X)
+    print(f"My accuracy = {np.mean(y == yhat)}")
+
+    from sklearn.naive_bayes import MultinomialNB as SKMNB
+
+    clf = SKMNB()
+    clf.fit(X, y)
+    yhat = clf.predict(X)
+    print(f"Sklearn's accuracy = {np.mean(y == yhat)}")
+
+
 if __name__ == "__main__":
-    run_gnb()
+    #  run_gnb()
+    run_mnb()
