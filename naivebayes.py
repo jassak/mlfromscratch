@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import Counter
 from pprint import pprint as print
 
 import numpy as np
@@ -132,9 +133,10 @@ class GaussianNB(NaiveBayesClassifier):
     >>> gnb = GaussianNB()
     >>> gnb.fit(X, y)
     >>> yhat = gnb.predict(X)
-    >>> print(f"My accuracy = {np.mean(y == yhat)}")
+    >>> print(np.mean(y == yhat))
     0.96
     """
+
     def fit(self, X, y):
         """Gaussian case: for every class in y computes means and standard
         deviations of the corresponding subset of X.
@@ -185,9 +187,20 @@ class GaussianNB(NaiveBayesClassifier):
 
 class MultinomialNB(NaiveBayesClassifier):
     """
-    Gaussian naive Bayes classifier for continuous data.
+    Multinomial naive Bayes classifier for discrete data.
 
+    Examples
+    --------
+    >>> from sklearn.datasets import load_digits
+    >>> X, y = load_digits(return_X_y=True)
+    >>> X = X.astype("int32")
+    >>> mnb = MultinomialNB()
+    >>> mnb.fit(X, y)
+    >>> yhat = mnb.predict(X)
+    >>> print(np.mean(y == yhat))
+    0.9037284362826934
     """
+
     def __init__(self, alpha=1):
         self.alpha = alpha
         super().__init__()
@@ -221,7 +234,7 @@ class MultinomialNB(NaiveBayesClassifier):
             N_c = self.theta_[:, c].sum()
             for i in range(self.n_features_):
                 self.theta_[i][c] += self.alpha
-                self.theta_[i][c] /= (N_c + self.alpha * self.n_samples_)
+                self.theta_[i][c] /= N_c + self.alpha * self.n_samples_
 
     def predict(self, X):
         scores = []
@@ -247,6 +260,7 @@ class MultinomialNB(NaiveBayesClassifier):
 
         """
         self.feature_classes = [np.unique(feature) for feature in X.T]
+        self.class_count_ = np.array(list(Counter(y).values()))
         super()._store_data(X, y)
 
     def _compute_log_likelihoods(self, X, cls_indx):
@@ -266,8 +280,8 @@ class MultinomialNB(NaiveBayesClassifier):
         log-likelihoods
 
         """
-        likelihoods = [self.theta_[:, cls_indx] @ sample for sample in X]
-        return np.log(likelihoods)
+        log_likelihoods = [np.log(self.theta_[:, cls_indx]) @ sample for sample in X]
+        return log_likelihoods
 
 
 def run_gnb():
@@ -306,5 +320,5 @@ def run_mnb():
 
 
 if __name__ == "__main__":
-    #  run_gnb()
+    run_gnb()
     run_mnb()
